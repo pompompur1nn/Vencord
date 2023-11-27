@@ -327,9 +327,8 @@ function runTime(token: string) {
 
             if (!chunks) throw new Error("Failed to get chunks");
 
-            chunksLoop:
-            for (const entryPoint in chunks) {
-                const chunkIds = chunks[entryPoint];
+            await Promise.all(Object.keys(chunks).map(async entryPoint => {
+                const chunkIds = chunks![entryPoint];
 
                 for (const id of chunkIds) {
                     if (!wreq.u(id)) continue;
@@ -340,21 +339,21 @@ function runTime(token: string) {
 
                     if (isWasm) {
                         invalidChunks.push(id);
-                        continue chunksLoop;
+                        return;
                     }
 
                     validChunks.push(id);
                 }
 
                 validChunksEntryPoints.push(entryPoint);
-            }
+            }));
 
-            for (const entryPoint of validChunksEntryPoints) {
+            await Promise.all(validChunksEntryPoints.map(async entryPoint => {
                 try {
                     // Loads all chunks required for an entry point
                     await (wreq as any).el(entryPoint);
                 } catch (err) { }
-            }
+            }));
 
             const allChunks = Function("return " + (wreq.u.toString().match(/(?<=\()\{.+?\}/s)?.[0] ?? "null"))() as Record<string | number, string[]> | null;
             if (!allChunks) throw new Error("Failed to get all chunks");
@@ -362,14 +361,14 @@ function runTime(token: string) {
                 return !(validChunks.includes(id) || invalidChunks.includes(id));
             });
 
-            for (const id of chunksLeft) {
+            await Promise.all(chunksLeft.map(async id => {
                 const isWasm = await fetch(wreq.p + wreq.u(id))
                     .then(r => r.text())
                     .then(t => t.includes(".module.wasm") || !t.includes("(this.webpackChunkdiscord_app=this.webpackChunkdiscord_app||[]).push"));
 
                 // Loads a chunk
                 if (!isWasm) await wreq.e(id as any);
-            }
+            }));
 
             // Make sure every chunk has finished loading
             await new Promise(r => setTimeout(r, 1000));
